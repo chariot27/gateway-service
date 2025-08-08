@@ -34,7 +34,11 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     );
 
     private boolean isPublicPath(String path) {
-        return openEndpoints.contains(path);
+        // 🔧 Remove query string e barra final, normaliza em minúsculo
+        String cleanPath = path.split("\\?")[0].replaceAll("/+$", "").toLowerCase();
+
+        return openEndpoints.stream()
+                .anyMatch(endpoint -> cleanPath.equalsIgnoreCase(endpoint));
     }
 
     @Override
