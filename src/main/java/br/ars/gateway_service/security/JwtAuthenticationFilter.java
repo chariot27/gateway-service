@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -16,14 +17,16 @@ import io.jsonwebtoken.Jwts;
 import reactor.core.publisher.Mono;
 
 @Component
+@Order(0)
 public class JwtAuthenticationFilter implements GlobalFilter {
 
     @Value("${jwt.secret}")
     private String secretKey;
 
+    // ✅ Caminhos pós-StripPrefix
     private static final List<String> openEndpoints = List.of(
-        "/api/users/login",
-        "/api/users/register"
+        "/register",
+        "/login"
     );
 
     private boolean isPublicPath(String path) {
@@ -34,14 +37,13 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
 
-        // 🔓 Ignora autenticação para rotas públicas
+        // ✅ Ignorar verificação JWT se for um endpoint público
         if (isPublicPath(path)) {
             return chain.filter(exchange);
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
-        // 🔐 Verifica existência e formato do token
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
@@ -55,7 +57,6 @@ public class JwtAuthenticationFilter implements GlobalFilter {
                 .build()
                 .parseClaimsJws(token);
 
-            // 🔓 Token válido → segue adiante
             return chain.filter(exchange);
 
         } catch (JwtException e) {
