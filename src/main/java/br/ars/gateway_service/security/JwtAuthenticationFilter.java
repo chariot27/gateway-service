@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
@@ -34,9 +35,7 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     );
 
     private boolean isPublicPath(String path) {
-        // 🔧 Remove query string e barra final, normaliza em minúsculo
         String cleanPath = path.split("\\?")[0].replaceAll("/+$", "").toLowerCase();
-
         return openEndpoints.stream()
                 .anyMatch(endpoint -> cleanPath.equalsIgnoreCase(endpoint));
     }
@@ -44,16 +43,25 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
+        HttpMethod method = exchange.getRequest().getMethod();
 
+        // ✅ Libera CORS pré-flight automaticamente
+        if (HttpMethod.OPTIONS.equals(method)) {
+            logger.debug("🟡 Requisição OPTIONS liberada automaticamente: {}", path);
+            exchange.getResponse().setStatusCode(HttpStatus.OK);
+            return exchange.getResponse().setComplete();
+        }
+
+        // ✅ Libera login e register
         if (isPublicPath(path)) {
-            logger.debug("🔓 Acesso liberado para endpoint público: {}", path);
+            logger.debug("🔓 Endpoint público liberado: {}", path);
             return chain.filter(exchange);
         }
 
+        // 🔐 Verifica token para demais rotas
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            logger.warn("❌ Token ausente ou mal formatado: {}", path);
+            logger.warn("❌ Token ausente ou mal formatado para rota: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
