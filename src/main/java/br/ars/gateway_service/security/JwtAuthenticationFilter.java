@@ -23,21 +23,22 @@ public class JwtAuthenticationFilter implements GlobalFilter {
     @Value("${jwt.secret}")
     private String secretKey;
 
-    // ✅ Caminhos pós-StripPrefix
+    // ✅ Endpoints públicos (sem autenticação)
     private static final List<String> openEndpoints = List.of(
         "/register",
         "/login"
     );
 
+    // 🔎 Permitir caminhos que contenham os endpoints públicos, como /api/users/login
     private boolean isPublicPath(String path) {
-        return openEndpoints.stream().anyMatch(path::equalsIgnoreCase);
+        return openEndpoints.stream().anyMatch(path::endsWith);
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
 
-        // ✅ Ignorar verificação JWT se for um endpoint público
+        // ✅ Ignora autenticação para endpoints públicos
         if (isPublicPath(path)) {
             return chain.filter(exchange);
         }
@@ -55,11 +56,12 @@ public class JwtAuthenticationFilter implements GlobalFilter {
             Jwts.parserBuilder()
                 .setSigningKey(secretKey.getBytes(StandardCharsets.UTF_8))
                 .build()
-                .parseClaimsJws(token);
+                .parseClaimsJws(token); // ✅ Valida integridade e expiração
 
             return chain.filter(exchange);
 
         } catch (JwtException e) {
+            System.out.println("Token inválido ou expirado: " + e.getMessage()); // ⛏️ substitua por Logger
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
