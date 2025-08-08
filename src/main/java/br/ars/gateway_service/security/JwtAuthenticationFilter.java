@@ -26,31 +26,41 @@ public class JwtAuthenticationFilter implements GlobalFilter {
         "/api/users/register"
     );
 
+    private boolean isPublicPath(String path) {
+        return openEndpoints.stream().anyMatch(path::equalsIgnoreCase);
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
-        if (openEndpoints.contains(path)) {
+
+        // 🔓 Ignora autenticação para rotas públicas
+        if (isPublicPath(path)) {
             return chain.filter(exchange);
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
+        // 🔐 Verifica existência e formato do token
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
 
         String token = authHeader.substring(7);
+
         try {
             Jwts.parserBuilder()
                 .setSigningKey(secretKey.getBytes(StandardCharsets.UTF_8))
                 .build()
                 .parseClaimsJws(token);
+
+            // 🔓 Token válido → segue adiante
             return chain.filter(exchange);
+
         } catch (JwtException e) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
     }
 }
-
