@@ -5,47 +5,51 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
+import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.web.server.ServerWebExchange;
 
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import reactor.core.publisher.Mono;
 
 @Component
 @Order(0)
 public class JwtAuthenticationFilter implements GlobalFilter {
 
+    private static final Logger logger = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
     @Value("${jwt.secret}")
     private String secretKey;
 
-    // ✅ Endpoints públicos (sem autenticação)
+    // 🟢 Endpoints públicos exatos
     private static final List<String> openEndpoints = List.of(
-        "/register",
-        "/login"
+        "/api/users/login",
+        "/api/users/register"
     );
 
-    // 🔎 Permitir caminhos que contenham os endpoints públicos, como /api/users/login
     private boolean isPublicPath(String path) {
-        return openEndpoints.stream().anyMatch(path::endsWith);
+        return openEndpoints.contains(path);
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getPath().toString();
 
-        // ✅ Ignora autenticação para endpoints públicos
         if (isPublicPath(path)) {
+            logger.debug("🔓 Acesso liberado para endpoint público: {}", path);
             return chain.filter(exchange);
         }
 
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            logger.warn("❌ Token ausente ou mal formatado: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
@@ -56,12 +60,12 @@ public class JwtAuthenticationFilter implements GlobalFilter {
             Jwts.parserBuilder()
                 .setSigningKey(secretKey.getBytes(StandardCharsets.UTF_8))
                 .build()
-                .parseClaimsJws(token); // ✅ Valida integridade e expiração
+                .parseClaimsJws(token);
 
             return chain.filter(exchange);
 
         } catch (JwtException e) {
-            System.out.println("Token inválido ou expirado: " + e.getMessage()); // ⛏️ substitua por Logger
+            logger.error("❌ Token inválido ou expirado: {}", e.getMessage());
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
