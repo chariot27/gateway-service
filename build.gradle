@@ -39,9 +39,4 @@ dependencyManagement {
     }
 }
 
-configurations {
-    all {
-        exclude group: 'org.springframework.cloud', module: 'spring-cloud-starter-netflix-eureka-client'
-        exclude group: 'com.netflix.eureka'
-    }
-}
+
